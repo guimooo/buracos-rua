@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buraco Zero SP - Alertas da Cidade</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --bg-color: #f4f7f6;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: #333;
+        }
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1rem 2rem;
+            text-align: center;
+        }
+        nav {
+            display: flex;
+            justify-content: center;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        nav button {
+            background: none;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        nav button.active {
+            border-bottom: 3px solid var(--secondary-color);
+            color: var(--secondary-color);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        /* Formulário */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button.btn-submit {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+        button.btn-submit:hover {
+            background-color: #2980b9;
+        }
+        /* Cards da Prefeitura */
+        .report-card {
+            border: 1px solid #eee;
+            border-left: 5px solid #e74c3c;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            display: flex;
+            gap: 1rem;
+            background: #fafafa;
+        }
+        .report-card img {
+            max-width: 150px;
+            border-radius: 4px;
+            object-fit: cover;
+        }
+        /* Dashboard */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        .chart-container {
+            background: white;
+            padding: 1rem;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+        #map {
+            height: 300px;
+            width: 100%;
+            border-radius: 8px;
+            z-index: 1;
+        }
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Buraco Zero SP</h1>
+        <p>Sistema Integrado de Zeladoria Urbana</p>
+    </header>
+
+    <nav>
+        <button class="active" onclick="switchTab('cidadao', this)">Visão do Cidadão</button>
+        <button onclick="switchTab('prefeitura', this)">Visão da Prefeitura</button>
+        <button onclick="switchTab('dashboard', this)">Dashboard Público</button>
+    </nav>
+
+    <div class="container">
+        <div id="cidadao" class="tab-content active">
+            <h2>Reportar um Buraco na Via</h2>
+            <form id="reportForm">
+                <div class="form-group">
+                    <label for="nome">Seu Nome:</label>
+                    <input type="text" id="nome" placeholder="Ex: Guilherme" required>
+                </div>
+                <div class="form-group">
+                    <label for="local">Endereço/Local do Buraco (Região de SP):</label>
+                    <input type="text" id="local" placeholder="Ex: Av. Paulista, 1578 - Bela Vista" required>
+                </div>
+                <div class="form-group">
+                    <label for="foto">Foto do Buraco:</label>
+                    <input type="file" id="foto" accept="image/*" required>
+                </div>
+                <button type="submit" class="btn-submit">Enviar Alerta para a Prefeitura</button>
+            </form>
+        </div>
+
+        <div id="prefeitura" class="tab-content">
+            <h2>Painel de Recebimento - Prefeitura</h2>
+            <p>Alertas recentes enviados pelos cidadãos:</p>
+            <div id="reportsList">
+                <p style="color: #7f8c8d;">Nenhum alerta recebido ainda na sessão atual.</p>
+            </div>
+        </div>
+
+        <div id="dashboard" class="tab-content">
+            <h2>Transparência e Eficiência</h2>
+            <div class="dashboard-grid">
+                
+                <div class="chart-container" style="grid-column: 1 / -1;">
+                    <h3>Mapa de Calor (Incidências em SP)</h3>
+                    <div id="map"></div>
+                </div>
+
+                <div class="chart-container">
+                    <h3>% de Alertas por Região</h3>
+                    <canvas id="alertasRegionChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>% de Buracos Arrumados por Região</h3>
+                    <canvas id="resolvidosRegionChart"></canvas>
+                </div>
+
+                <div class="chart-container" style="grid-column: 1 / -1;">
+                    <h3>Eficácia: Governo Atual vs Anteriores</h3>
+                    <canvas id="eficaciaChart"></canvas>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Lógica de navegação entre abas
+        function switchTab(tabId, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            btnElement.classList.add('active');
+
+            // Renderiza o mapa corretamente se a aba for a de dashboard
+            if(tabId === 'dashboard') {
+                setTimeout(() => { map.invalidateSize(); }, 100);
+            }
+        }
+
+        // Lógica de submissão do formulário do Cidadão
+        const form = document.getElementById('reportForm');
+        const reportsList = document.getElementById('reportsList');
+        let reportCount = 0;
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const nome = document.getElementById('nome').value;
+            const local = document.getElementById('local').value;
+            const fotoInput = document.getElementById('foto');
+            
+            let imageUrl = '';
+            if (fotoInput.files && fotoInput.files[0]) {
+                // Cria uma URL temporária para mostrar a imagem no navegador
+                imageUrl = URL.createObjectURL(fotoInput.files[0]);
+            }
+
+            // Remove o texto de "Nenhum alerta" no primeiro envio
+            if (reportCount === 0) {
+                reportsList.innerHTML = '';
+            }
+
+            const dataAtual = new Date().toLocaleString('pt-BR');
+
+            // Cria o card para a visão da prefeitura
+            const card = document.createElement('div');
+            card.className = 'report-card';
+            card.innerHTML = `
+                ${imageUrl ? `<img src="${imageUrl}" alt="Foto do buraco">` : ''}
+                <div>
+                    <h4>Local: ${local}</h4>
+                    <p><strong>Reportado por:</strong> ${nome}</p>
+                    <p><strong>Data/Hora:</strong> ${dataAtual}</p>
+                    <p><strong>Status:</strong> <span style="color: #e74c3c; font-weight: bold;">Pendente</span></p>
+                </div>
+            `;
+            
+            // Adiciona no topo da lista
+            reportsList.prepend(card);
+            reportCount++;
+
+            alert('Alerta enviado com sucesso! A prefeitura já recebeu seu chamado.');
+            form.reset();
+        });
+
+        // ==========================================
+        // DADOS E CONFIGURAÇÕES DO DASHBOARD (Mock Data baseados em São Paulo)
+        // ==========================================
+
+        // 1. Inicialização do Mapa (Leaflet) centralizado em São Paulo
+        const map = L.map('map').setView([-23.5505, -46.6333], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Simulando marcadores (Heatmap simples) de buracos reportados
+        const pontosSP = [
+            [-23.5505, -46.6333], // Centro
+            [-23.6000, -46.6667], // Zona Sul
+            [-23.5333, -46.5167], // Zona Leste
+            [-23.5000, -46.6333], // Zona Norte
+            [-23.5500, -46.7167]  // Zona Oeste
+        ];
+        pontosSP.forEach(coord => {
+            L.circle(coord, { color: 'red', fillColor: '#f03', fillOpacity: 0.5, radius: 1500 }).addTo(map);
+        });
+
+        // 2. Gráficos (Chart.js)
+        const regioes = ['Zona Leste', 'Zona Sul', 'Centro', 'Zona Oeste', 'Zona Norte'];
+
+        // Gráfico: Alertas por Região (%)
+        new Chart(document.getElementById('alertasRegionChart'), {
+            type: 'bar',
+            data: {
+                labels: regioes,
+                datasets: [{
+                    label: '% de Alertas Registrados',
+                    data: [35, 25, 15, 10, 15],
+                    backgroundColor: '#e74c3c'
+                }]
+            },
+            options: { responsive: true }
+        });
+
+        // Gráfico: Buracos Arrumados por Região (%)
+        new Chart(document.getElementById('resolvidosRegionChart'), {
+            type: 'bar',
+            data: {
+                labels: regioes,
+                datasets: [{
+                    label: '% de Buracos Arrumados',
+                    data: [20, 18, 12, 8, 10], // Valores menores que os alertas
+                    backgroundColor: '#2ecc71'
+                }]
+            },
+            options: { responsive: true }
+        });
+
+        // Gráfico: Eficácia Governos
+        new Chart(document.getElementById('eficaciaChart'), {
+            type: 'line',
+            data: {
+                labels: ['2020 (Gestão Anterior)', '2021', '2022', '2023', '2024 (Atual)'],
+                datasets: [
+                    {
+                        label: 'Tempo Médio de Resposta (Dias)',
+                        data: [45, 40, 30, 25, 15],
+                        borderColor: '#f39c12',
+                        tension: 0.3,
+                        fill: false
+                    },
+                    {
+                        label: 'Volume de Soluções (Milhares)',
+                        data: [12, 14, 18, 22, 28],
+                        borderColor: '#3498db',
+                        tension: 0.3,
+                        fill: false
+                    }
+                ]
+            },
+            options: { responsive: true }
+        });
+    </script>
+</body>
+</html>
